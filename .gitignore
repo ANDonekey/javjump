@@ -2,4 +2,6 @@ upstream.user.js
 *.garbled-backup.js
 tmp-*.user.js
 node_modules
-dist
+dist/*
+!dist/*.user.js
+!dist/*.meta.js
