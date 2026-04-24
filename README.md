@@ -1,6 +1,8 @@
 # javjump
 
-为常见 JAV 信息站注入“跳转在线观看”按钮的 Userscript。
+一个为常见 JAV 信息站添加“跳转在线观看”按钮的 Userscript。
+
+<img width="402" height="278" alt="图片" src="https://github.com/user-attachments/assets/eeac6e89-3f38-4465-b87d-ee80276a456d" />
 
 ## 功能
 
