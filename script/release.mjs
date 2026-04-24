@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,12 +6,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 
-const releaseBaseName = "JAV 添加跳转在线观看";
-const distUserScriptPath = path.join(repoRoot, "dist", `${releaseBaseName}.user.js`);
-const distMetaPath = path.join(repoRoot, "dist", `${releaseBaseName}.meta.js`);
-
 async function main() {
-  await mkdir(path.join(repoRoot, "dist"), { recursive: true });
+  const distDir = path.join(repoRoot, "dist");
+  await mkdir(distDir, { recursive: true });
+
+  const distFiles = await readdir(distDir);
+  const userScriptFileName = distFiles.find((fileName) => fileName.endsWith(".user.js"));
+
+  if (!userScriptFileName) {
+    throw new Error("无法在 dist 目录中找到 .user.js 构建产物。");
+  }
+
+  const distUserScriptPath = path.join(distDir, userScriptFileName);
+  const distMetaPath = path.join(distDir, userScriptFileName.replace(/\.user\.js$/, ".meta.js"));
 
   const userScriptContent = await readFile(distUserScriptPath, "utf8");
   const metaBlockMatch = userScriptContent.match(

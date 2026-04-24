@@ -343,6 +343,56 @@ export function videoPageParser(
       hasPlayer,
       hasNotFoundText
     });
+  } else if (siteItem.name === SITE_NAMES.JAVMENU) {
+    const normalizedCode = normalizeCode(CODE);
+    const titleTexts = [
+      doc.querySelector("title")?.textContent || "",
+      doc.querySelector("meta[property='og:title']")?.getAttribute("content") || "",
+      doc.querySelector("meta[name='description']")?.getAttribute("content") || "",
+      doc.querySelector("link[rel='canonical']")?.getAttribute("href") || "",
+      doc.querySelector("meta[property='og:url']")?.getAttribute("content") || "",
+      doc.querySelector(".code")?.textContent || "",
+      doc.querySelector(".display-5 strong")?.textContent || ""
+    ];
+    const hasMatchedCode = titleTexts.some((text) => normalizeCode(text).includes(normalizedCode));
+    const hasPlayer =
+      !!doc.querySelector("#primary-player video[src], #seo-main-video[src]") ||
+      !!doc.querySelector("#player-tab .nav-link[data-m3u8]") ||
+      !!doc.querySelector(".video-list-item-tag-wrapper .badge.bg-success");
+    const lowerText = responseText.toLowerCase();
+    const hasNotFoundText =
+      (lowerText.includes("404") ||
+        lowerText.includes("not found") ||
+        lowerText.includes("page not found") ||
+        lowerText.includes("video not found")) &&
+      !hasMatchedCode;
+
+    if (hasNotFoundText) {
+      const result = {
+        isSuccess: false,
+        isCloudflare: false,
+        isNotFound: true,
+        resultLink: response.finalUrl || response.responseURL || "",
+        hasContent: false,
+        tag: tagsQuery({ leakageText: leakNodeText, subtitleText: subNodeText })
+      };
+      logSiteSignals(siteItem, "javmenuSignals", {
+        code: CODE,
+        hasMatchedCode,
+        hasPlayer,
+        hasNotFoundText,
+        result
+      });
+      return result;
+    }
+
+    videoNode = hasMatchedCode && hasPlayer ? true : null;
+    logSiteSignals(siteItem, "javmenuSignals", {
+      code: CODE,
+      hasMatchedCode,
+      hasPlayer,
+      hasNotFoundText
+    });
   } else {
     videoNode = domQuery?.videoQuery ? doc.querySelector(domQuery.videoQuery) : true;
   }

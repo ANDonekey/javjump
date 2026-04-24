@@ -358,7 +358,13 @@ export function createVideoSites(
       hostname: "javmenu.com",
       url: "https://javmenu.com/{{code}}",
       fetchType: "get",
-      domQuery: { videoQuery: "a.nav-link[aria-controls='pills-0']" }
+      domQuery: {
+        videoQuery: "#primary-player video[src], #seo-main-video[src], #player-tab .nav-link[data-m3u8]"
+      },
+      cloudflare: {
+        useChallengeText: false,
+        useHeaders: false
+      }
     },
     {
       name: SITE_NAMES.HAYAV,

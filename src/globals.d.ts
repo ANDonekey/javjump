@@ -38,6 +38,20 @@ interface HlsStatic {
 }
 
 declare global {
+  const __DEBUG_TO_PAGE__: boolean;
+
+  interface JavJumpDebugResponseEntry {
+    key: string;
+    site: string;
+    code: string;
+    targetLink: string;
+    fetchedAt: string;
+    status: number;
+    finalUrl: string;
+    headers: string;
+    html: string;
+  }
+
   function GM_addStyle(css: string): void;
   function GM_getValue<T>(key: string, defaultValue?: T): T;
   function GM_setValue<T>(key: string, value: T): void;
@@ -55,7 +69,19 @@ declare global {
   interface Window {
     Hls?: HlsStatic;
     __javJumpHlsPromise?: Promise<HlsStatic | undefined>;
+    __javJumpDebug?: {
+      keys: string[];
+      responses: Record<string, JavJumpDebugResponseEntry>;
+      lastResponse: JavJumpDebugResponseEntry;
+      listSites: () => string[];
+      getEntry: (key: string) => JavJumpDebugResponseEntry | null;
+      getSite: (site: string) => JavJumpDebugResponseEntry[];
+      getLatestSite: (site: string) => JavJumpDebugResponseEntry | null;
+      getSiteHtml: (site: string) => string;
+    };
   }
+
+  const unsafeWindow: Window | undefined;
 }
 
 export {};

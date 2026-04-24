@@ -8,6 +8,7 @@
 - 支持搜索页匹配、直达详情页检测、部分站点的 POST 搜索
 - 对部分站点做了 Cloudflare 挑战页识别，尽量减少误命中
 - 支持在结果中标记字幕、无码等标签信息
+- 支持调试日志与响应 HTML 抓取，方便定位站点失效和误判
 
 ## 安装
 
@@ -53,6 +54,93 @@
 - `JAVLib`
 
 不同站点可用性会随目标站结构和反爬策略变化。
+
+## Debug 调试
+
+脚本内置了调试日志和最近响应缓存，适合排查：
+
+- 某个站点为什么没命中
+- 为什么被误判成 `CF`
+- 目标站实际返回了什么 HTML
+
+### 开启调试
+
+在脚本菜单或你现有的调试开关里启用 debug 后，脚本会：
+
+- 在控制台输出 `request`、`response`、`searchPage`、`videoPage`、`result` 等日志
+- 把最近最多 `20` 份响应 HTML 挂到页面环境的 `window.__javJumpDebug`
+
+关闭 debug 时，`window.__javJumpDebug` 会被清掉。
+
+说明：
+
+- 普通 `npm run build` 构建会保留这个页面调试桥
+- `npm run release` 产物会自动移除 `unsafeWindow` 暴露，发布版不再提供 `window.__javJumpDebug`
+
+### 控制台用法
+
+打开浏览器开发者工具后，可以直接在 Console 里执行：
+
+```js
+window.__javJumpDebug
+```
+
+查看最后一次抓到的 HTML：
+
+```js
+window.__javJumpDebug.lastResponse.html
+```
+
+复制最后一次 HTML：
+
+```js
+copy(window.__javJumpDebug.lastResponse.html)
+```
+
+按 key 读取某一条响应：
+
+```js
+window.__javJumpDebug.responses["JAVMENU:AARM-120:https://javmenu.com/AARM-120"].html
+```
+
+列出当前缓存里有哪些站点：
+
+```js
+window.__javJumpDebug.listSites()
+```
+
+查看某个站点最近一次响应：
+
+```js
+window.__javJumpDebug.getLatestSite("JAVMENU")
+```
+
+直接拿某个站点最近一次 HTML：
+
+```js
+window.__javJumpDebug.getSiteHtml("JAVMENU")
+```
+
+### 调试数据结构
+
+每条响应包含这些字段：
+
+- `key`
+- `site`
+- `code`
+- `targetLink`
+- `fetchedAt`
+- `status`
+- `finalUrl`
+- `headers`
+- `html`
+
+其中最常用的是：
+
+- `status`：返回状态码
+- `finalUrl`：最终跳转到的地址
+- `headers`：响应头
+- `html`：完整响应正文
 
 ## 开发
 

@@ -1,12 +1,13 @@
 {
   "name": "javjump",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "release": "npm run build && node script/release.mjs",
+    "build:release": "tsc && vite build --mode release",
+    "release": "npm run build:release && node script/release.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
