@@ -159,12 +159,7 @@ npm run release
 
 ## 更新
 
-脚本头部已配置：
-
-- `@downloadURL`
-- `@updateURL`
-
-发布到 GitHub 仓库 `main` 分支后，脚本管理器即可通过元文件地址检查更新。
+更新日志见：[CHANGELOG.md](./CHANGELOG.md)
 
 ## 仓库
 
