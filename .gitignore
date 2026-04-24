@@ -1,2 +1,5 @@
 upstream.user.js
 *.garbled-backup.js
+tmp-*.user.js
+node_modules
+dist
