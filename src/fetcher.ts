@@ -6,7 +6,7 @@ import {
   MISSAV_PLAYER_SELECTOR,
   SITE_NAMES
 } from "@/constants";
-import { extractNodeCode, normalizeCode, tagsQuery } from "@/helpers";
+import { extractNodeCode, extractVideoCode, normalizeCode, tagsQuery } from "@/helpers";
 import {
   logSearchPageDebug,
   logSiteError,
@@ -345,20 +345,33 @@ export function videoPageParser(
     });
   } else if (siteItem.name === SITE_NAMES.JAVMENU) {
     const normalizedCode = normalizeCode(CODE);
+    const canonicalUrl = doc.querySelector("link[rel='canonical']")?.getAttribute("href") || "";
+    const ogUrl = doc.querySelector("meta[property='og:url']")?.getAttribute("content") || "";
+    const detailCodeTexts = [
+      doc.querySelector(".code")?.textContent || "",
+      doc.querySelector(".display-5 strong")?.textContent || "",
+      doc.querySelector("h1")?.textContent || ""
+    ];
     const titleTexts = [
       doc.querySelector("title")?.textContent || "",
       doc.querySelector("meta[property='og:title']")?.getAttribute("content") || "",
-      doc.querySelector("meta[name='description']")?.getAttribute("content") || "",
-      doc.querySelector("link[rel='canonical']")?.getAttribute("href") || "",
-      doc.querySelector("meta[property='og:url']")?.getAttribute("content") || "",
-      doc.querySelector(".code")?.textContent || "",
-      doc.querySelector(".display-5 strong")?.textContent || ""
+      doc.querySelector("meta[name='description']")?.getAttribute("content") || ""
     ];
-    const hasMatchedCode = titleTexts.some((text) => normalizeCode(text).includes(normalizedCode));
+    const hasExactDetailCode = detailCodeTexts.some(
+      (text) => normalizeCode(extractVideoCode(text)) === normalizedCode
+    );
+    const hasExactTitleCode = titleTexts.some(
+      (text) => normalizeCode(extractVideoCode(text)) === normalizedCode
+    );
+    const hasExactUrlCode = [canonicalUrl, ogUrl].some((urlText) => {
+      const lastSegment = urlText.split("/").filter(Boolean).pop() || "";
+      return normalizeCode(lastSegment) === normalizedCode;
+    });
+    const hasMatchedCode = hasExactDetailCode || (hasExactTitleCode && hasExactUrlCode);
     const hasPlayer =
       !!doc.querySelector("#primary-player video[src], #seo-main-video[src]") ||
       !!doc.querySelector("#player-tab .nav-link[data-m3u8]") ||
-      !!doc.querySelector(".video-list-item-tag-wrapper .badge.bg-success");
+      !!doc.querySelector("#tab-content video[data-poster], #tab-content video[src]");
     const lowerText = responseText.toLowerCase();
     const hasNotFoundText =
       (lowerText.includes("404") ||
@@ -389,6 +402,9 @@ export function videoPageParser(
     videoNode = hasMatchedCode && hasPlayer ? true : null;
     logSiteSignals(siteItem, "javmenuSignals", {
       code: CODE,
+      hasExactDetailCode,
+      hasExactTitleCode,
+      hasExactUrlCode,
       hasMatchedCode,
       hasPlayer,
       hasNotFoundText

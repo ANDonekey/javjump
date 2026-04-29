@@ -205,6 +205,79 @@ function parseHighporn(
   };
 }
 
+function parseBestJp(responseText: string, siteItem: VideoSiteConfig, CODE: string): SearchParseResult {
+  const doc = new DOMParser().parseFromString(responseText, "text/html");
+  const pageTitle = doc.querySelector("title")?.textContent || "";
+  const bodyText = doc.body?.textContent || "";
+  const anchorNodes = Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href*='/video/']"));
+  const normalizedTargetCode = normalizeCode(CODE);
+
+  const candidates = anchorNodes
+    .map((node) => {
+      const href = node.href?.replace(node.hostname, siteItem.hostname) || "";
+      const hrefSlug = node.getAttribute("href")?.split("/").filter(Boolean).pop() || "";
+      const candidateText = [
+        node.getAttribute("title") || "",
+        node.textContent || "",
+        hrefSlug
+      ].join(" ");
+
+      const codeSources = [hrefSlug, node.getAttribute("title") || "", node.textContent || ""];
+      let candidateCode = "";
+
+      for (const source of codeSources) {
+        const extractedCode = extractVideoCode(source);
+        if (normalizeCode(extractedCode) === normalizedTargetCode) {
+          candidateCode = extractedCode;
+          break;
+        }
+      }
+
+      if (!candidateCode) {
+        for (const source of codeSources) {
+          const extractedCode = extractVideoCode(source);
+          if (normalizeCode(extractedCode)) {
+            candidateCode = extractedCode;
+            break;
+          }
+        }
+      }
+
+      return {
+        href,
+        candidateCode,
+        candidateText: candidateText.trim()
+      };
+    })
+    .filter((item, index, array) => item.href && array.findIndex((entry) => entry.href === item.href) === index);
+
+  const hasContent =
+    candidates.length > 0 ||
+    pageTitle.toLowerCase().includes("search results") ||
+    normalizeCode(pageTitle).includes(normalizedTargetCode) ||
+    bodyText.includes("Search results for:");
+  const matchedItems = candidates.filter(
+    (item) => normalizeCode(item.candidateCode) === normalizedTargetCode
+  );
+
+  if (matchedItems.length === 0) {
+    return { isSuccess: false, isCloudflare: false, hasContent };
+  }
+
+  const matchedItem = matchedItems[0];
+  return {
+    isSuccess: true,
+    isCloudflare: false,
+    hasContent,
+    resultLink: matchedItem.href,
+    multipleRes: matchedItems.length > 1,
+    tag: tagsQuery({
+      leakageText: matchedItem.candidateText,
+      subtitleText: matchedItem.candidateText
+    })
+  };
+}
+
 function parseAV01(responseText: string, siteItem: VideoSiteConfig, CODE: string): SearchParseResult {
   try {
     const payload = JSON.parse(responseText) as { videos?: Av01VideoItem[] };
@@ -284,29 +357,86 @@ function parseJavtiful(
   CODE: string
 ): SearchParseResult {
   const doc = new DOMParser().parseFromString(responseText, "text/html");
-  const resultCards = Array.from(doc.querySelectorAll("#search-videos .card")).map((card) => {
-    const linkNode = card.querySelector<HTMLAnchorElement>("a.video-tmb[href*='/video/']");
-    const titleNode = card.querySelector<HTMLAnchorElement>("a.video-link[title]");
-    const imageNode = card.querySelector<HTMLImageElement>("img[alt]");
-    const codeText = card.querySelector(".label-code")?.textContent || "";
-    const candidateText = [
-      codeText,
+  const pageTitle = doc.querySelector("title")?.textContent?.trim() || "";
+  const bodyText = doc.body?.textContent?.trim() || "";
+  const hasSearchPage =
+    pageTitle.toLowerCase().includes("search result") ||
+    bodyText.includes(`Search Result for "${CODE}"`) ||
+    bodyText.includes("搜索结果") ||
+    bodyText.includes("Search Result for");
+  const hasNoResultText =
+    bodyText.includes("未找到视频") ||
+    bodyText.includes("请尝试其他关键词") ||
+    bodyText.toLowerCase().includes("no videos found");
+  const resolveJavtifulCandidateCode = (
+    linkNode: HTMLAnchorElement,
+    titleNode: HTMLAnchorElement | null,
+    imageNode: HTMLImageElement | null,
+    cardText: string
+  ) => {
+    const hrefSlug = linkNode.getAttribute("href")?.split("/").filter(Boolean).pop() || "";
+    const codeSources = [
+      hrefSlug,
       titleNode?.getAttribute("title") || "",
       titleNode?.textContent || "",
       imageNode?.getAttribute("alt") || "",
-      linkNode?.getAttribute("href") || ""
-    ].join(" ");
+      cardText
+    ];
 
-    return {
-      href: linkNode?.href?.replace(linkNode.hostname, siteItem.hostname) || "",
-      candidateCode: extractVideoCode(candidateText),
-      candidateText: candidateText.trim()
-    };
-  });
+    for (const source of codeSources) {
+      const extractedCode = extractVideoCode(source);
+      if (normalizeCode(extractedCode) === normalizeCode(CODE)) {
+        return extractedCode;
+      }
+    }
 
-  const cardsWithLinks = resultCards.filter((item) => item.href);
-  const hasContent = cardsWithLinks.length > 0;
-  const matchedItems = cardsWithLinks.filter(
+    for (const source of codeSources) {
+      const extractedCode = extractVideoCode(source);
+      if (normalizeCode(extractedCode)) {
+        return extractedCode;
+      }
+    }
+
+    return "";
+  };
+
+  const candidateLinks = Array.from(
+    doc.querySelectorAll<HTMLAnchorElement>(
+      "#search-videos a[href*='/video/'], main a[href*='/video/'], a[href*='/video/']"
+    )
+  );
+
+  const resultCards = candidateLinks
+    .map((linkNode) => {
+      const card =
+        linkNode.closest("article, .card, .group, li, .grid > div, .grid-item") ||
+        linkNode.parentElement ||
+        linkNode;
+      const titleNode =
+        card.querySelector<HTMLAnchorElement>("a[title][href*='/video/']") ||
+        linkNode;
+      const imageNode = card.querySelector<HTMLImageElement>("img[alt]");
+      const codeText = card.querySelector(".label-code, .badge, .tag")?.textContent || "";
+      const cardText = card.textContent || "";
+      const candidateText = [
+        codeText,
+        titleNode?.getAttribute("title") || "",
+        titleNode?.textContent || "",
+        imageNode?.getAttribute("alt") || "",
+        cardText,
+        linkNode.getAttribute("href") || ""
+      ].join(" ");
+
+      return {
+        href: linkNode.href?.replace(linkNode.hostname, siteItem.hostname) || "",
+        candidateCode: resolveJavtifulCandidateCode(linkNode, titleNode, imageNode, cardText),
+        candidateText: candidateText.trim()
+      };
+    })
+    .filter((item, index, array) => item.href && array.findIndex((entry) => entry.href === item.href) === index);
+
+  const hasContent = resultCards.length > 0 || hasSearchPage || hasNoResultText;
+  const matchedItems = resultCards.filter(
     (item) => normalizeCode(item.candidateCode) === normalizeCode(CODE)
   );
 
@@ -414,12 +544,16 @@ export function createVideoSites(
       name: SITE_NAMES.BESTJP,
       hostname: "www.bestjavporn.com",
       url: "https://www.bestjavporn.com/search/{{code}}",
+      browseUrl: "https://www.bestjavporn.com/search/{{code}}",
       fetchType: "parser",
       strictParser: true,
-      domQuery: {
-        linkQuery: "a[href*='/video/']",
-        titleQuery: "a[href*='/video/']"
-      }
+      cloudflare: {
+        useChallengeText: false,
+        useHeaders: false,
+        useStatus403: false,
+        useErrorText: false
+      },
+      searchParser: (responseText, siteItem, code) => parseBestJp(responseText, siteItem, code)
     },
     {
       name: "Jav.Guru",
@@ -503,7 +637,7 @@ export function createVideoSites(
     {
       name: SITE_NAMES.JAVTIFUL,
       hostname: "javtiful.com",
-      url: "https://javtiful.com/search/videos?search_query={{code}}",
+      url: "https://javtiful.com/zh/search?q={{code}}",
       fetchType: "parser",
       strictParser: true,
       searchParser: (responseText, siteItem, code) => parseJavtiful(responseText, siteItem, code)

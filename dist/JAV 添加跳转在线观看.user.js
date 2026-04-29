@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JAV 添加跳转在线观看
 // @namespace    https://github.com/ANDonekey/javjump
-// @version      1.1.0
+// @version      1.1.1
 // @author       ANDonekey
 // @description  为 JavDB、JavBus、JavLibrary、JMVBT 等站点添加跳转在线观看的链接
 // @license      MIT
@@ -1059,6 +1059,66 @@
       })
     };
   }
+  function parseBestJp(responseText, siteItem, CODE) {
+    var _a, _b;
+    const doc = new DOMParser().parseFromString(responseText, "text/html");
+    const pageTitle = ((_a = doc.querySelector("title")) == null ? void 0 : _a.textContent) || "";
+    const bodyText = ((_b = doc.body) == null ? void 0 : _b.textContent) || "";
+    const anchorNodes = Array.from(doc.querySelectorAll("a[href*='/video/']"));
+    const normalizedTargetCode = normalizeCode(CODE);
+    const candidates = anchorNodes.map((node) => {
+      var _a2, _b2;
+      const href = ((_a2 = node.href) == null ? void 0 : _a2.replace(node.hostname, siteItem.hostname)) || "";
+      const hrefSlug = ((_b2 = node.getAttribute("href")) == null ? void 0 : _b2.split("/").filter(Boolean).pop()) || "";
+      const candidateText = [
+        node.getAttribute("title") || "",
+        node.textContent || "",
+        hrefSlug
+      ].join(" ");
+      const codeSources = [hrefSlug, node.getAttribute("title") || "", node.textContent || ""];
+      let candidateCode = "";
+      for (const source of codeSources) {
+        const extractedCode = extractVideoCode(source);
+        if (normalizeCode(extractedCode) === normalizedTargetCode) {
+          candidateCode = extractedCode;
+          break;
+        }
+      }
+      if (!candidateCode) {
+        for (const source of codeSources) {
+          const extractedCode = extractVideoCode(source);
+          if (normalizeCode(extractedCode)) {
+            candidateCode = extractedCode;
+            break;
+          }
+        }
+      }
+      return {
+        href,
+        candidateCode,
+        candidateText: candidateText.trim()
+      };
+    }).filter((item, index, array) => item.href && array.findIndex((entry) => entry.href === item.href) === index);
+    const hasContent = candidates.length > 0 || pageTitle.toLowerCase().includes("search results") || normalizeCode(pageTitle).includes(normalizedTargetCode) || bodyText.includes("Search results for:");
+    const matchedItems = candidates.filter(
+      (item) => normalizeCode(item.candidateCode) === normalizedTargetCode
+    );
+    if (matchedItems.length === 0) {
+      return { isSuccess: false, isCloudflare: false, hasContent };
+    }
+    const matchedItem = matchedItems[0];
+    return {
+      isSuccess: true,
+      isCloudflare: false,
+      hasContent,
+      resultLink: matchedItem.href,
+      multipleRes: matchedItems.length > 1,
+      tag: tagsQuery({
+        leakageText: matchedItem.candidateText,
+        subtitleText: matchedItem.candidateText
+      })
+    };
+  }
   function parseAV01(responseText, siteItem, CODE) {
     try {
       const payload = JSON.parse(responseText);
@@ -1120,29 +1180,64 @@
     };
   }
   function parseJavtiful(responseText, siteItem, CODE) {
+    var _a, _b, _c, _d;
     const doc = new DOMParser().parseFromString(responseText, "text/html");
-    const resultCards = Array.from(doc.querySelectorAll("#search-videos .card")).map((card) => {
-      var _a, _b;
-      const linkNode = card.querySelector("a.video-tmb[href*='/video/']");
-      const titleNode = card.querySelector("a.video-link[title]");
+    const pageTitle = ((_b = (_a = doc.querySelector("title")) == null ? void 0 : _a.textContent) == null ? void 0 : _b.trim()) || "";
+    const bodyText = ((_d = (_c = doc.body) == null ? void 0 : _c.textContent) == null ? void 0 : _d.trim()) || "";
+    const hasSearchPage = pageTitle.toLowerCase().includes("search result") || bodyText.includes(`Search Result for "${CODE}"`) || bodyText.includes("搜索结果") || bodyText.includes("Search Result for");
+    const hasNoResultText = bodyText.includes("未找到视频") || bodyText.includes("请尝试其他关键词") || bodyText.toLowerCase().includes("no videos found");
+    const resolveJavtifulCandidateCode = (linkNode, titleNode, imageNode, cardText) => {
+      var _a2;
+      const hrefSlug = ((_a2 = linkNode.getAttribute("href")) == null ? void 0 : _a2.split("/").filter(Boolean).pop()) || "";
+      const codeSources = [
+        hrefSlug,
+        (titleNode == null ? void 0 : titleNode.getAttribute("title")) || "",
+        (titleNode == null ? void 0 : titleNode.textContent) || "",
+        (imageNode == null ? void 0 : imageNode.getAttribute("alt")) || "",
+        cardText
+      ];
+      for (const source of codeSources) {
+        const extractedCode = extractVideoCode(source);
+        if (normalizeCode(extractedCode) === normalizeCode(CODE)) {
+          return extractedCode;
+        }
+      }
+      for (const source of codeSources) {
+        const extractedCode = extractVideoCode(source);
+        if (normalizeCode(extractedCode)) {
+          return extractedCode;
+        }
+      }
+      return "";
+    };
+    const candidateLinks = Array.from(
+      doc.querySelectorAll(
+        "#search-videos a[href*='/video/'], main a[href*='/video/'], a[href*='/video/']"
+      )
+    );
+    const resultCards = candidateLinks.map((linkNode) => {
+      var _a2, _b2;
+      const card = linkNode.closest("article, .card, .group, li, .grid > div, .grid-item") || linkNode.parentElement || linkNode;
+      const titleNode = card.querySelector("a[title][href*='/video/']") || linkNode;
       const imageNode = card.querySelector("img[alt]");
-      const codeText = ((_a = card.querySelector(".label-code")) == null ? void 0 : _a.textContent) || "";
+      const codeText = ((_a2 = card.querySelector(".label-code, .badge, .tag")) == null ? void 0 : _a2.textContent) || "";
+      const cardText = card.textContent || "";
       const candidateText = [
         codeText,
         (titleNode == null ? void 0 : titleNode.getAttribute("title")) || "",
         (titleNode == null ? void 0 : titleNode.textContent) || "",
         (imageNode == null ? void 0 : imageNode.getAttribute("alt")) || "",
-        (linkNode == null ? void 0 : linkNode.getAttribute("href")) || ""
+        cardText,
+        linkNode.getAttribute("href") || ""
       ].join(" ");
       return {
-        href: ((_b = linkNode == null ? void 0 : linkNode.href) == null ? void 0 : _b.replace(linkNode.hostname, siteItem.hostname)) || "",
-        candidateCode: extractVideoCode(candidateText),
+        href: ((_b2 = linkNode.href) == null ? void 0 : _b2.replace(linkNode.hostname, siteItem.hostname)) || "",
+        candidateCode: resolveJavtifulCandidateCode(linkNode, titleNode, imageNode, cardText),
         candidateText: candidateText.trim()
       };
-    });
-    const cardsWithLinks = resultCards.filter((item) => item.href);
-    const hasContent = cardsWithLinks.length > 0;
-    const matchedItems = cardsWithLinks.filter(
+    }).filter((item, index, array) => item.href && array.findIndex((entry) => entry.href === item.href) === index);
+    const hasContent = resultCards.length > 0 || hasSearchPage || hasNoResultText;
+    const matchedItems = resultCards.filter(
       (item) => normalizeCode(item.candidateCode) === normalizeCode(CODE)
     );
     if (matchedItems.length === 0) {
@@ -1240,12 +1335,16 @@
         name: SITE_NAMES.BESTJP,
         hostname: "www.bestjavporn.com",
         url: "https://www.bestjavporn.com/search/{{code}}",
+        browseUrl: "https://www.bestjavporn.com/search/{{code}}",
         fetchType: "parser",
         strictParser: true,
-        domQuery: {
-          linkQuery: "a[href*='/video/']",
-          titleQuery: "a[href*='/video/']"
-        }
+        cloudflare: {
+          useChallengeText: false,
+          useHeaders: false,
+          useStatus403: false,
+          useErrorText: false
+        },
+        searchParser: (responseText, siteItem, code) => parseBestJp(responseText, siteItem, code)
       },
       {
         name: "Jav.Guru",
@@ -1328,7 +1427,7 @@
       {
         name: SITE_NAMES.JAVTIFUL,
         hostname: "javtiful.com",
-        url: "https://javtiful.com/search/videos?search_query={{code}}",
+        url: "https://javtiful.com/zh/search?q={{code}}",
         fetchType: "parser",
         strictParser: true,
         searchParser: (responseText, siteItem, code) => parseJavtiful(responseText, siteItem, code)
@@ -1618,7 +1717,7 @@
     };
   }
   function videoPageParser(responseText, domQuery = {}, siteItem, CODE, response) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
     const doc = new DOMParser().parseFromString(responseText, "text/html");
     const subNode = (domQuery == null ? void 0 : domQuery.subQuery) ? doc.querySelector(domQuery.subQuery) : null;
     const subNodeText = (subNode == null ? void 0 : subNode.innerHTML) || "";
@@ -1735,17 +1834,30 @@
       });
     } else if (siteItem.name === SITE_NAMES.JAVMENU) {
       const normalizedCode = normalizeCode(CODE);
-      const titleTexts = [
-        ((_l = doc.querySelector("title")) == null ? void 0 : _l.textContent) || "",
-        ((_m = doc.querySelector("meta[property='og:title']")) == null ? void 0 : _m.getAttribute("content")) || "",
-        ((_n = doc.querySelector("meta[name='description']")) == null ? void 0 : _n.getAttribute("content")) || "",
-        ((_o = doc.querySelector("link[rel='canonical']")) == null ? void 0 : _o.getAttribute("href")) || "",
-        ((_p = doc.querySelector("meta[property='og:url']")) == null ? void 0 : _p.getAttribute("content")) || "",
-        ((_q = doc.querySelector(".code")) == null ? void 0 : _q.textContent) || "",
-        ((_r = doc.querySelector(".display-5 strong")) == null ? void 0 : _r.textContent) || ""
+      const canonicalUrl = ((_l = doc.querySelector("link[rel='canonical']")) == null ? void 0 : _l.getAttribute("href")) || "";
+      const ogUrl = ((_m = doc.querySelector("meta[property='og:url']")) == null ? void 0 : _m.getAttribute("content")) || "";
+      const detailCodeTexts = [
+        ((_n = doc.querySelector(".code")) == null ? void 0 : _n.textContent) || "",
+        ((_o = doc.querySelector(".display-5 strong")) == null ? void 0 : _o.textContent) || "",
+        ((_p = doc.querySelector("h1")) == null ? void 0 : _p.textContent) || ""
       ];
-      const hasMatchedCode = titleTexts.some((text) => normalizeCode(text).includes(normalizedCode));
-      const hasPlayer = !!doc.querySelector("#primary-player video[src], #seo-main-video[src]") || !!doc.querySelector("#player-tab .nav-link[data-m3u8]") || !!doc.querySelector(".video-list-item-tag-wrapper .badge.bg-success");
+      const titleTexts = [
+        ((_q = doc.querySelector("title")) == null ? void 0 : _q.textContent) || "",
+        ((_r = doc.querySelector("meta[property='og:title']")) == null ? void 0 : _r.getAttribute("content")) || "",
+        ((_s = doc.querySelector("meta[name='description']")) == null ? void 0 : _s.getAttribute("content")) || ""
+      ];
+      const hasExactDetailCode = detailCodeTexts.some(
+        (text) => normalizeCode(extractVideoCode(text)) === normalizedCode
+      );
+      const hasExactTitleCode = titleTexts.some(
+        (text) => normalizeCode(extractVideoCode(text)) === normalizedCode
+      );
+      const hasExactUrlCode = [canonicalUrl, ogUrl].some((urlText) => {
+        const lastSegment = urlText.split("/").filter(Boolean).pop() || "";
+        return normalizeCode(lastSegment) === normalizedCode;
+      });
+      const hasMatchedCode = hasExactDetailCode || hasExactTitleCode && hasExactUrlCode;
+      const hasPlayer = !!doc.querySelector("#primary-player video[src], #seo-main-video[src]") || !!doc.querySelector("#player-tab .nav-link[data-m3u8]") || !!doc.querySelector("#tab-content video[data-poster], #tab-content video[src]");
       const lowerText = responseText.toLowerCase();
       const hasNotFoundText = (lowerText.includes("404") || lowerText.includes("not found") || lowerText.includes("page not found") || lowerText.includes("video not found")) && !hasMatchedCode;
       if (hasNotFoundText) {
@@ -1769,6 +1881,9 @@
       videoNode = hasMatchedCode && hasPlayer ? true : null;
       logSiteSignals(siteItem, "javmenuSignals", {
         code: CODE,
+        hasExactDetailCode,
+        hasExactTitleCode,
+        hasExactUrlCode,
         hasMatchedCode,
         hasPlayer,
         hasNotFoundText

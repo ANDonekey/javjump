@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [1.1.1] - 2026-04-29
+
+### Changed
+
+- Updated `Javtiful` search URL to the new `/zh/search?q={{code}}` route.
+- Added a dedicated `BestJP` search parser to avoid generic search-page mismatches.
+- Tightened `JAVMENU` detail-page detection so recommendation pages no longer count as valid hits.
+
+### Fixed
+
+- Fixed `Javtiful` search parsing when result cards included prefix text such as `FHD 02:08:42` before the actual code.
+- Fixed `Javtiful` no-result pages being shown as Cloudflare hits instead of normal misses.
+- Fixed `BestJP` search parsing for codes such as `SAN-449` and `DLDSS-449`.
+- Fixed `JAVMENU` false positives where codes like `AVSA-436` could land on a `You May Like` page and still be treated as a match.
+
 ## [1.1.0] - 2026-04-24
 
 ### Added

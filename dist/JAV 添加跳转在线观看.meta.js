@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JAV 添加跳转在线观看
 // @namespace    https://github.com/ANDonekey/javjump
-// @version      1.1.0
+// @version      1.1.1
 // @author       ANDonekey
 // @description  为 JavDB、JavBus、JavLibrary、JMVBT 等站点添加跳转在线观看的链接
 // @license      MIT
